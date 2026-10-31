@@ -117,8 +117,8 @@ $('upload').onchange=async e=>{
   if(file.size>5000000)throw Error('5MB 이하 파일을 선택하세요.');
   const data=parseWorkbook(await file.arrayBuffer());if(version!==loadVersion)return;load(data,file.name);saveTimetable(file.name);
  }catch(err){
-  $('formatMessage').textContent=FORMAT_ERROR;
-  if(file.size>5000000)$('formatMessage').textContent+=' 5MB 이하 파일을 선택하세요.';
+  $('formatMessage').textContent=file.size>5000000?'5MB 이하 파일을 선택하세요.':'';
+  $('formatMessage').hidden=file.size<=5000000;
   $('formatDialog').showModal();if(!sheet)restoreTimetable();
  }finally{e.target.value='';}
 };
