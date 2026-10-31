@@ -25,7 +25,7 @@ function renderApplicationRows(){
   return `<div class="application-row"><label><input type="checkbox" data-request-pair="${esc(pair.id)}" ${checked?'checked':''}> 교체 ${pair.number} · ${esc(own.group)} · ${time(own)} ${esc(own.subject)}</label><p>${esc(name(other.teacher))} · ${esc(other.subject)} · ${time(other)}</p><label>맞바꿀 수업의 실제 날짜<input type="date" data-request-date="${esc(pair.id)}" value="${esc(previous?.makeupDate||'')}" ${checked?'required':''}></label></div>`;
  }).join('');
  const initial=applicationChoices().find(x=>applicationStartPair?x.pair.id===applicationStartPair:true)?.pair.applications?.[teacher];
- $('absenceDate').value=initial?.absenceDate||'';$('applicationReason').value=initial?.reason||'';$('applicationNote').value=initial?.note||'';
+ $('absenceDate').value=initial?.absenceDate||'';$('applicationNote').value=initial?.note||'';
 }
 function openApplication(pairId=null){
  if(!savedSwaps.length)return;applicationStartPair=pairId;
@@ -42,7 +42,7 @@ function collectApplication(){
   const {pair,own,other}=choice;
   const dateInput=[...$('applicationRows').querySelectorAll('[data-request-date]')].find(x=>x.dataset.requestDate===pair.id);
   const makeupDate=dateInput.value,makeup=localDate(makeupDate);
-  if(absent.getDay()!==own.day+1)throw Error(`${name(teacher)} 선생님의 ${time(own)} 수업에 맞는 결강일자를 선택하세요.`);
+  if(absent.getDay()!==own.day+1)throw Error(`${name(teacher)} 선생님의 ${time(own)} 수업에 맞는 결보강일자를 선택하세요.`);
   if(makeup.getDay()!==other.day+1)throw Error(`교체 ${pair.number}: ${time(other)}에 맞는 날짜를 선택하세요.`);
   if(own.period>7||usedPeriods.has(own.period))throw Error('한 신청서에는 1~7교시를 중복 없이 입력할 수 있습니다. 날짜별로 나누어 작성하세요.');
   // Confirm actual dated lessons do not overlap across multiple saved pairs.
@@ -51,7 +51,7 @@ function collectApplication(){
  }
  if(!rows.length)throw Error('신청서에 넣을 교체를 하나 이상 선택하세요.');
  rows.sort((a,b)=>a.own.period-b.own.period);
- return {teacher,teacherName:name(teacher),absenceDate,reason:$('applicationReason').value.trim(),note:$('applicationNote').value.trim(),rows};
+ return {teacher,teacherName:name(teacher),absenceDate,reason:'',note:$('applicationNote').value.trim(),rows};
 }
 function applicationFields(data){
  const fields={45:`( ${[...new Set(data.rows.map(r=>r.own.subject))].join('·')} )과     교 사 : ( ${data.teacherName} ) 인`,55:'  '+dateLabel(data.absenceDate,true),69:data.reason,383:data.note,386:'',389:''};
@@ -85,14 +85,47 @@ function fillHwp(template,fields,summary){
   if(line){const b=line.body.slice(0,36);new DataView(b.buffer).setUint32(0,0,true);output.push({...line,body:b});}
   i=end-1;
  }
- const rebuilt=CFB.utils.cfb_new({root:'Root Entry'});
- for(let i=0;i<cfb.FileIndex.length;i++){
-  const entry=cfb.FileIndex[i];if(entry.type!==2)continue;
-  const path=cfb.FullPaths[i].slice(cfb.FullPaths[0].length);if(!path||path==='PrvImage')continue;
-  const content=path==='BodyText/Section0'?fflate.deflateSync(packHwp(output)):path==='PrvText'?utf16(summary):new Uint8Array(entry.content);
-  CFB.utils.cfb_add(rebuilt,'/'+path,content);
+ return patchHwpContainer(template,{
+  Section0:fflate.deflateSync(packHwp(output)),
+  PrvText:utf16(summary),
+  // Clear the old sample thumbnail without deleting its directory entry.
+  PrvImage:Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9WQAAAAASUVORK5CYII='),c=>c.charCodeAt(0))
+ });
+}
+// Preserve the supplied OLE directory tree and metadata instead of rebuilding it.
+function patchHwpContainer(template,replacements){
+ const original=new Uint8Array(template),header=original.slice(0,512),hv=new DataView(header.buffer);
+ const sectorSize=1<<hv.getUint16(30,true),miniSize=1<<hv.getUint16(32,true);
+ if(sectorSize!==512||miniSize!==64||hv.getUint32(44,true)!==1)throw Error('지원하지 않는 HWP 저장 구조입니다.');
+ const FREE=0xffffffff,END=0xfffffffe,fatSector=hv.getUint32(76,true);
+ const fat=Array.from(new Uint32Array(original.slice((fatSector+1)*512,(fatSector+2)*512).buffer));
+ function chain(start,table=fat){const seen=new Set(),result=[];while(start<0xfffffffa){if(start>=table.length||seen.has(start))throw Error('HWP 저장 체인 오류');seen.add(start);result.push(start);start=table[start];}return result;}
+ function readChain(start){const ids=chain(start),b=new Uint8Array(ids.length*512);ids.forEach((id,i)=>b.set(original.slice((id+1)*512,(id+2)*512),i*512));return b;}
+ const directoryIds=chain(hv.getUint32(48,true)),directory=readChain(hv.getUint32(48,true));
+ const dv=new DataView(directory.buffer),entries=[];
+ for(let offset=0;offset<directory.length;offset+=128){const type=dv.getUint8(offset+66),size=dv.getUint16(offset+64,true);if(!type)continue;const name=new TextDecoder('utf-16le').decode(directory.slice(offset,offset+Math.max(0,size-2)));entries.push({offset,type,name,start:dv.getUint32(offset+116,true),size:dv.getUint32(offset+120,true)});}
+ const root=entries.find(e=>e.type===5);if(!root)throw Error('HWP 루트 저장소가 없습니다.');
+ const originalMini=readChain(root.start).slice(0,root.size),oldMiniFatStart=hv.getUint32(60,true);
+ const miniFat=Array.from(new Uint32Array(readChain(oldMiniFatStart).buffer));
+ const pieces=[originalMini];let miniLength=originalMini.length;
+ for(const [name,content] of Object.entries(replacements)){
+  const entry=entries.find(e=>e.type===2&&e.name===name);if(!entry||content.length>=4096)throw Error('신청서 내용이 양식의 저장 범위를 초과했습니다. 하단 내용을 줄여주세요.');
+  if(entry.size<4096)for(const id of chain(entry.start,miniFat))miniFat[id]=FREE;
+  else for(const id of chain(entry.start))fat[id]=FREE;
+  const start=Math.ceil(miniLength/64),count=Math.ceil(content.length/64),part=new Uint8Array(count*64);part.set(content);
+ for(let i=0;i<count;i++)miniFat[start+i]=i===count-1?END:start+i+1;
+  pieces.push(part);miniLength+=part.length;
+  dv.setUint32(entry.offset+116,start,true);dv.setUint32(entry.offset+120,content.length,true);dv.setUint32(entry.offset+124,0,true);
  }
- return new Uint8Array(CFB.write(rebuilt,{type:'array'}));
+ const newMini=new Uint8Array(miniLength);let p=0;for(const part of pieces){newMini.set(part,p);p+=part.length;}
+ const appended=[];let next=original.length/512-1;
+ function append(bytes){const count=Math.ceil(bytes.length/512),start=next;if(start+count>fat.length)throw Error('신청서 저장 공간을 초과했습니다.');for(let i=0;i<count;i++){const b=new Uint8Array(512);b.set(bytes.slice(i*512,(i+1)*512));appended.push(b);fat[next]=i===count-1?END:next+1;next++;}return start;}
+ for(const id of chain(root.start))fat[id]=FREE;
+ for(const id of chain(oldMiniFatStart))fat[id]=FREE;
+ const newRootStart=append(newMini),miniFatBytes=new Uint8Array(Math.ceil(miniFat.length/128)*512);miniFatBytes.fill(255);const mfv=new DataView(miniFatBytes.buffer);miniFat.forEach((value,i)=>mfv.setUint32(i*4,value===undefined?FREE:value,true));
+ const newMiniFatStart=append(miniFatBytes);dv.setUint32(root.offset+116,newRootStart,true);dv.setUint32(root.offset+120,miniLength,true);dv.setUint32(root.offset+124,0,true);hv.setUint32(60,newMiniFatStart,true);hv.setUint32(64,miniFatBytes.length/512,true);
+ const result=new Uint8Array(original.length+appended.length*512);result.set(original);result.set(header);appended.forEach((b,i)=>result.set(b,original.length+i*512));directoryIds.forEach((id,i)=>result.set(directory.slice(i*512,(i+1)*512),(id+1)*512));
+ const fv=new DataView(result.buffer,(fatSector+1)*512,512);fat.forEach((value,i)=>fv.setUint32(i*4,value,true));return result;
 }
 function applicationPreview(data,hwpUrl,filename){
  const fields=applicationFields(data),filled=new Map(data.rows.map(r=>[r.own.period,r]));
