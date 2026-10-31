@@ -1,3 +1,5 @@
+const FIXED_SUBJECTS=new Set(['스A','스B','스클','주1','주2','창체','진로']);
+function isFixedLesson(lesson){return FIXED_SUBJECTS.has(String(lesson?.subject||'').replace(/\s+/g,'').toUpperCase());}
 /* XLSX parsing and swap calculation run entirely in this browser. */
 function parseWorkbook(bytes) {
   let total = 0;
@@ -48,7 +50,7 @@ function parseWorkbook(bytes) {
 }
 function swapCandidates(sheet,selectedId){
   const lessons=sheet.lessons,a=lessons.find(x=>x.id===selectedId);
-  if(!a||!/^\d+-\d+$/.test(a.group))return [];
+  if(!a||isFixedLesson(a)||!/^\d+-\d+$/.test(a.group))return [];
   const key=(...v)=>JSON.stringify(v);
   const occupied=new Set(lessons.map(x=>key(x.teacher,x.day,x.period))),counts=new Map();
   for(const x of lessons)if(x.group){const k=key(x.group,x.day,x.period);counts.set(k,(counts.get(k)||0)+1);}
@@ -62,7 +64,7 @@ function swapCandidates(sheet,selectedId){
   };
   const results=[];
   for(const b of lessons){
-    if(b.teacher===a.teacher||b.group!==a.group||(b.day===a.day&&b.period===a.period))continue;
+    if(isFixedLesson(b)||b.teacher===a.teacher||b.group!==a.group||(b.day===a.day&&b.period===a.period))continue;
     if(occupied.has(key(b.teacher,a.day,a.period))||occupied.has(key(a.teacher,b.day,b.period)))continue;
     if(counts.get(key(b.group,b.day,b.period))!==1)continue;
     const changes=[];let penalty=0;
@@ -78,4 +80,4 @@ function swapCandidates(sheet,selectedId){
   }
   return results.sort((a,b)=>b.score-a.score||a.lesson.day-b.lesson.day||a.lesson.period-b.lesson.period||a.lesson.teacher.localeCompare(b.lesson.teacher));
 }
-if(typeof module!=='undefined')module.exports={swapCandidates};
+if(typeof module!=='undefined')module.exports={swapCandidates,isFixedLesson};
