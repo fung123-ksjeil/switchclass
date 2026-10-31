@@ -102,18 +102,14 @@ $('saveSwap').onclick=()=>{
  $('saveSwap').disabled=false;$('saveSwap').textContent='삭제';$('saveSwap').classList.add('delete-swap');$('saveMessage').textContent=`교체 ${nextNumber} 저장 완료 · 같은 색과 번호로 표시했습니다.`;
 };
 function renderSavedList(){
- $('savedList').innerHTML=savedSwaps.length?savedSwaps.map(pair=>{const [a,b]=pair.lessons,c=pairColor(pair.number);return `<article class="saved-item" style="--pair-bg:${c.bg};--pair-border:${c.border}"><h3><span class="saved-number">${pair.number}</span> ${esc(a.group)} 학급</h3><p>${esc(name(a.teacher))} · ${esc(a.subject)}<br>${time(a)} → ${time(b)}</p><p>${esc(name(b.teacher))} · ${esc(b.subject)}<br>${time(b)} → ${time(a)}</p><div><button data-saved-view="${esc(pair.id)}">시간표에서 보기</button><button data-saved-remove="${esc(pair.id)}">삭제</button></div></article>`;}).join(''):'<p class="empty">저장한 교체가 없습니다.</p>';
+ $('savedList').innerHTML=savedSwaps.length?savedSwaps.map(pair=>{const [a,b]=pair.lessons,c=pairColor(pair.number);return `<article class="saved-item" style="--pair-bg:${c.bg};--pair-border:${c.border}"><h3><span class="saved-number">${pair.number}</span> ${esc(a.group)} 학급</h3><p>${esc(name(a.teacher))} · ${esc(a.subject)}<br>${time(a)} → ${time(b)}</p><p>${esc(name(b.teacher))} · ${esc(b.subject)}<br>${time(b)} → ${time(a)}</p><div><button data-saved-remove="${esc(pair.id)}">삭제</button></div></article>`;}).join(''):'<p class="empty">저장한 교체가 없습니다.</p>';
 }
 $('savedOpen').onclick=()=>{if(!sheet)return;renderSavedList();$('savedDialog').showModal();};
 $('savedClose').onclick=()=>$('savedDialog').close();
 $('savedList').onclick=e=>{
  const remove=e.target.closest('[data-saved-remove]');
  if(remove){if(!persistSwaps(savedSwaps.filter(p=>p.id!==remove.dataset.savedRemove))){showStatus('저장 목록을 변경하지 못했습니다. 브라우저 설정을 확인하세요.');return;}renderSavedList();return;}
- const view=e.target.closest('[data-saved-view]');if(!view)return;
- const pair=savedSwaps.find(p=>p.id===view.dataset.savedView);if(!pair)return;
- focusedTeacher=null;selected=null;matches=[];draw();render();$('savedDialog').close();
- const button=[...$('grid').querySelectorAll('[data-id]')].find(b=>b.dataset.id===pair.lessons[0].id);
- button?.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});button?.focus({preventScroll:true});
+
 };
 $('formatClose').onclick=()=>$('formatDialog').close();
 $('upload').onchange=async e=>{
