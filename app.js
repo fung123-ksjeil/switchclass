@@ -39,7 +39,7 @@ function clear(){if(!sheet)return;request++;selected=null;matches=[];draw();rend
 function visibleMatches(){return matches.filter(m=>!$('sameDay').checked||m.lesson.day===selected?.day);}
 function draw(){
  if(!sheet)return;
- const savedByLesson=new Map(savedSwaps.flatMap(pair=>pair.lessons.map(l=>[l.id,pair])));
+ const savedByLesson=new Map();for(const pair of savedSwaps)for(const lesson of pair.lessons){if(!savedByLesson.has(lesson.id))savedByLesson.set(lesson.id,[]);savedByLesson.get(lesson.id).push(pair);}
  const ranks=new Map(visibleMatches().map((m,i)=>[m.lesson.id,i+1]));
  let head='<tr><th class="teacher-col" rowspan="2">교사</th>';
  for(let d=0;d<5;d++)head+=`<th colspan="${sheet.slots.filter(s=>s.day===d).length}" class="day-head">${days[d]}요일</th>`;
@@ -50,8 +50,8 @@ function draw(){
  for(const t of sheet.teachers){
   html+=`<tr class="${focusedTeacher===t.id?'row-focused':focusedTeacher?'row-unfocused':''}"><th scope="row" class="teacher-col ${selected?.teacher===t.id?'selected-teacher':''}">${`<button class="teacher-name" data-teacher="${esc(t.id)}" aria-pressed="${focusedTeacher===t.id}" aria-label="${esc(t.name)} 시간표 강조">${esc(t.name)}</button>`}</th>`;
   for(const s of sheet.slots){
-   const x=lookup.get(`${t.id}/${s.day}/${s.period}`),rank=x?ranks.get(x.id):null,pair=x?savedByLesson.get(x.id):null;
-   html+=`<td class="${s.period===1?'day-start':''}">${x?`<button data-id="${esc(x.id)}" ${rank?'data-match="true"':''} ${isFixedLesson(x)?'title="고정 수업 · 교체 불가"':pair?`title="저장한 교체 ${pair.number}" data-saved="${esc(pair.id)}" style="--pair-bg:${pairColor(pair.number).bg};--pair-border:${pairColor(pair.number).border}"`:''} class="${/^\d+-\d+$/.test(x.group)?'':'activity'} ${selected?.id===x.id?'active':''} ${rank?'possible':''} ${isFixedLesson(x)?'fixed-lesson':''} ${pair?'saved-pair':''}" aria-pressed="${selected?.id===x.id}" aria-label="${esc(t.name)} ${time(x)} ${esc(x.subject)} ${esc(x.group)}${isFixedLesson(x)?' 고정 수업 교체 불가':''}${rank?' 교체 추천 '+rank+'순위':''}">${pair?`<strong class="pair-badge">${pair.number}</strong>`:''}${rank?`<em>${rank}</em>`:''}<b>${esc(x.subject)}</b><span>${esc(x.group||'활동')}</span></button>`:'<span class="free">·</span>'}</td>`;
+   const x=lookup.get(`${t.id}/${s.day}/${s.period}`),rank=x?ranks.get(x.id):null,pairs=x?(savedByLesson.get(x.id)||[]):[],pair=pairs.at(-1);
+   html+=`<td class="${s.period===1?'day-start':''}">${x?`<button data-id="${esc(x.id)}" ${rank?'data-match="true"':''} ${isFixedLesson(x)?'title="고정 수업 · 교체 불가"':pair?`title="저장한 교체 ${pairs.map(p=>p.number).join(', ')}" data-saved="${esc(pair.id)}" style="--pair-bg:${pairColor(pair.number).bg};--pair-border:${pairColor(pair.number).border}"`:''} class="${/^\d+-\d+$/.test(x.group)?'':'activity'} ${selected?.id===x.id?'active':''} ${rank?'possible':''} ${isFixedLesson(x)?'fixed-lesson':''} ${pair?'saved-pair':''}" aria-pressed="${selected?.id===x.id}" aria-label="${esc(t.name)} ${time(x)} ${esc(x.subject)} ${esc(x.group)}${isFixedLesson(x)?' 고정 수업 교체 불가':''}${rank?' 교체 추천 '+rank+'순위':''}">${pair?`<strong class="pair-badge">${pairs.map(p=>p.number).join('·')}</strong>`:''}${rank?`<em>${rank}</em>`:''}<b>${esc(x.subject)}</b><span>${esc(x.group||'활동')}</span></button>`:'<span class="free">·</span>'}</td>`;
   }
   html+='</tr>';
  }
@@ -88,14 +88,25 @@ function openProposal(lessons){
  $('dialog').showModal();
 }
 function openSavedProposal(id){const pair=savedSwaps.find(p=>p.id===id);if(pair)openProposal(pair.lessons);}
-$('saveSwap').onclick=()=>{
+function confirmSwapConflicts(conflicts){
+ $('conflictText').textContent=conflicts.map(c=>`${days[c.day]}요일 ${c.period}교시에 중복수업입니다. (${c.labels.join(', ')})`).join('\n')+'\n\n실제 수업 날짜가 다를 수 있습니다. 그래도 진행하시겠습니까?';
+ const dialog=$('conflictDialog');dialog.returnValue='';
+ return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='yes'),{once:true});dialog.showModal();});
+}
+$('conflictYes').onclick=()=>$('conflictDialog').close('yes');
+$('conflictNo').onclick=()=>$('conflictDialog').close('no');
+$('saveSwap').onclick=async()=>{
  if(!proposalPair)return;
  const existing=savedSwaps.find(p=>samePair(p,proposalPair));
  if(existing){
   if(!persistSwaps(savedSwaps.filter(p=>p.id!==existing.id))){$('saveMessage').textContent='삭제하지 못했습니다. 브라우저 저장 설정을 확인하세요.';return;}
   renderSavedList();$('saveSwap').textContent='저장';$('saveSwap').classList.remove('delete-swap');$('saveMessage').textContent='삭제했습니다.';return;
  }
- if(savedSwaps.some(p=>p.lessons.some(l=>proposalPair.some(x=>x.id===l.id)))){$('saveMessage').textContent='이미 다른 교체에 저장된 수업입니다. 저장 목록에서 기존 교체를 삭제한 뒤 저장하세요.';return;}
+ const conflicts=savedSwapConflicts(sheet,savedSwaps,proposalPair);
+ if(conflicts.length){
+  $('saveSwap').disabled=true;const accepted=await confirmSwapConflicts(conflicts);$('saveSwap').disabled=false;
+  if(!accepted){$('saveMessage').textContent='저장을 취소했습니다.';return;}
+ }
  const nextNumber=Math.max(0,...savedSwaps.map(p=>p.number))+1;
  const record={id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),number:nextNumber,lessons:proposalPair};
  if(!persistSwaps([...savedSwaps,record])){$('saveMessage').textContent='브라우저에 저장하지 못했습니다. 저장 공간과 브라우저 설정을 확인하세요.';return;}

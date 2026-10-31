@@ -80,4 +80,25 @@ function swapCandidates(sheet,selectedId){
   }
   return results.sort((a,b)=>b.score-a.score||a.lesson.day-b.lesson.day||a.lesson.period-b.lesson.period||a.lesson.teacher.localeCompare(b.lesson.teacher));
 }
-if(typeof module!=='undefined')module.exports={swapCandidates,isFixedLesson};
+// Compare the effective weekly schedule after every saved swap plus this proposal.
+// Dates are intentionally not assumed: the user can confirm a different-date overlap.
+function savedSwapConflicts(sheet,savedPairs,proposedLessons){
+ const combined=[...savedPairs.map(p=>({...p,isNew:false})),{lessons:proposedLessons,isNew:true}];
+ const movedIds=new Set(combined.flatMap(p=>p.lessons.map(l=>l.id))),effective=[];
+ for(const lesson of sheet.lessons)if(!movedIds.has(lesson.id))effective.push({...lesson,isNew:false});
+ for(const pair of combined){const [a,b]=pair.lessons;effective.push({...a,day:b.day,period:b.period,isNew:pair.isNew},{...b,day:a.day,period:a.period,isNew:pair.isNew});}
+ const teachers=new Map(),groups=new Map(),conflicts=new Map();
+ const add=(day,period,label)=>{const key=day+'/'+period;if(!conflicts.has(key))conflicts.set(key,{day,period,labels:new Set()});conflicts.get(key).labels.add(label);};
+ for(const lesson of effective){
+  for(const [map,id] of [[teachers,lesson.teacher],[groups,lesson.group]]){
+   if(!id)continue;const key=JSON.stringify([id,lesson.day,lesson.period]);if(!map.has(key))map.set(key,[]);map.get(key).push(lesson);
+  }
+ }
+ for(const [map,type] of [[teachers,'teacher'],[groups,'group']])for(const items of map.values()){
+  if(items.length<2||!items.some(l=>l.isNew))continue;
+  const l=items[0],label=type==='teacher'?(sheet.teachers.find(t=>t.id===l.teacher)?.name||l.teacher)+' 선생님':l.group+' 학급';add(l.day,l.period,label);
+ }
+ for(const lesson of proposedLessons)if(savedPairs.some(p=>p.lessons.some(l=>l.id===lesson.id)))add(lesson.day,lesson.period,'다른 교체에도 포함된 수업');
+ return [...conflicts.values()].sort((a,b)=>a.day-b.day||a.period-b.period).map(c=>({...c,labels:[...c.labels]}));
+}
+if(typeof module!=='undefined')module.exports={swapCandidates,isFixedLesson,savedSwapConflicts};
