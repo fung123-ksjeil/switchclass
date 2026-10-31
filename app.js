@@ -89,7 +89,7 @@ function openProposal(lessons){
 }
 function openSavedProposal(id){const pair=savedSwaps.find(p=>p.id===id);if(pair)openProposal(pair.lessons);}
 function confirmSwapConflicts(conflicts){
- $('conflictText').textContent=conflicts.map(c=>`${days[c.day]}요일 ${c.period}교시에 중복수업입니다. (${c.labels.join(', ')})`).join('\n')+'\n\n실제 수업 날짜가 다를 수 있습니다. 그래도 진행하시겠습니까?';
+ $('conflictText').textContent=conflicts.map(c=>`${days[c.day]}요일 ${c.period}교시에 중복수업입니다. (${c.labels.join(', ')})`).join('\n')+'\n\n실제 수업 날짜가 다를 수는 있습니다. 진행하시겠습니까?';
  const dialog=$('conflictDialog');dialog.returnValue='';
  return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='yes'),{once:true});dialog.showModal();});
 }
