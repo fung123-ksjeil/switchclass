@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="440" viewBox="0 0 860 440">
+<rect width="860" height="440" rx="12" fill="#f6f8fc"/>
+<g font-family="sans-serif" fill="#243b53"><text x="30" y="38" font-size="20" font-weight="700">올바른 시간표 형식 예시</text><text x="30" y="65" font-size="14">과목 아래 행에 해당 학급을 입력하세요.</text></g>
+<g transform="translate(30 86)">
+<rect width="800" height="252" rx="4" fill="white" stroke="#bccbd9"/>
+<path d="M0 30H800M0 68H800M0 106H800M0 144H800M0 182H800M0 220H800M40 0V252M112 0V252M252 0V252M389 0V252M526 0V252M663 0V252" stroke="#d4dde6" fill="none"/>
+<path d="M0 0H800V30H0Z M0 0H40V252H0Z" fill="#e6ecf2"/>
+<rect x="252" y="30" width="548" height="38" fill="#dfeafb"/><rect x="252" y="68" width="548" height="38" fill="#eef4ff"/>
+<rect x="112" y="106" width="140" height="76" fill="#e2f2e8"/><rect x="112" y="182" width="140" height="70" fill="#e2f2e8"/>
+<g font-family="sans-serif" font-size="15" fill="#334e68" text-anchor="middle">
+<text x="76" y="21">A</text><text x="182" y="21">B</text><text x="320" y="21">C</text><text x="457" y="21">D</text><text x="594" y="21">E</text><text x="731" y="21">F</text>
+<text x="20" y="55">1</text><text x="20" y="93">2</text><text x="20" y="131">3</text><text x="20" y="169">4</text><text x="20" y="207">5</text><text x="20" y="242">6</text>
+<text x="76" y="55">번호</text><text x="182" y="55">교사</text><text x="525" y="55" font-weight="700">월</text>
+<text x="320" y="93">1</text><text x="457" y="93">2</text><text x="594" y="93">3</text><text x="731" y="93">4</text>
+<text x="76" y="131">1</text><text x="182" y="131" font-weight="700">김교사</text><text x="320" y="131">국어</text><text x="594" y="131">국어</text>
+<text x="320" y="169" fill="#167a63">1-1</text><text x="594" y="169" fill="#167a63">1-2</text>
+<text x="76" y="207">2</text><text x="182" y="207" font-weight="700">이교사</text><text x="457" y="207">수학</text><text x="731" y="207">수학</text>
+<text x="457" y="242" fill="#167a63">1-1</text><text x="731" y="242" fill="#167a63">1-2</text>
+</g></g>
+<g font-family="sans-serif" font-size="14" fill="#486581"><text x="30" y="369">① 1행: 요일(월·화·수·목·금)   ② 2행: 교시(1, 2, 3…)</text><text x="30" y="396">③ B열: 교사 이름   ④ 각 교사의 윗행: 과목 / 바로 아래 행: 학급(예: 1-1)</text><text x="30" y="423">빈 시간은 비워두세요. A열에는 각 교사의 번호를 입력하세요. 파일 형식: .xlsx</text></g>
+</svg>

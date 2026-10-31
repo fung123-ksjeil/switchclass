@@ -1,11 +1,31 @@
 const $=id=>document.getElementById(id), days=['월','화','수','목','금'];
-let book,sheet,selected=null,matches=[],request=0,proposal='';
+let book,sheet,selected=null,matches=[],request=0,proposal='',focusedTeacher=null,loadVersion=0;
+const CACHE_KEY='switchclass.timetable.v1';
+const FORMAT_ERROR='지원하는 시간표가 없습니다. 1행 요일, 2행 교시, B열 교사, 수업 아래 행 학급 형식을 사용하세요.';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const name=id=>sheet.teachers.find(t=>t.id===id)?.name||id;
 const time=x=>`${days[x.day]}요일 ${x.period}교시`;
 
-function load(data){book=data;$('sheet').innerHTML=book.sheets.map((s,i)=>`<option value="${i}">${esc(s.name)}${s.hidden?' · 이전':''}</option>`).join('');$('sheet').value=String(Math.max(0,book.sheets.findIndex(s=>!s.hidden)));changeSheet();}
-function changeSheet(){if(!book)return;sheet=book.sheets[+$('sheet').value];$('search').value='';clear();}
+function validateSheet(s){
+ if(!s||!Array.isArray(s.teachers)||!s.teachers.length||!Array.isArray(s.lessons)||!Array.isArray(s.slots)||!s.slots.length)throw Error(FORMAT_ERROR);
+ if(!s.teachers.every(t=>typeof t.id==='string'&&typeof t.name==='string')||!s.lessons.every(l=>['id','teacher','subject','group'].every(k=>typeof l[k]==='string')&&Number.isInteger(l.day)&&l.day>=0&&l.day<5&&Number.isInteger(l.period)&&l.period>=1&&l.period<=12)||!s.slots.every(t=>Number.isInteger(t.day)&&t.day>=0&&t.day<5&&Number.isInteger(t.period)&&t.period>=1&&t.period<=12))throw Error(FORMAT_ERROR);
+ return s;
+}
+function load(data,label='기본 시간표'){
+ const current=validateSheet(data.sheets.find(s=>!s.hidden)||data.sheets[0]);
+ book=data;sheet=current;focusedTeacher=null;$('sourceName').textContent=label;$('sourceName').title=label;clear();
+}
+function saveTimetable(label){
+ try{localStorage.setItem(CACHE_KEY,JSON.stringify({sheet,label}));}
+ catch{showStatus('시간표를 불러왔지만 브라우저에 저장할 수 없습니다. 저장 공간·브라우저 설정을 확인하세요.');}
+}
+function showStatus(message){$('status').hidden=!message;$('status').textContent=message;}
+async function restoreTimetable(){
+ const version=loadVersion;
+ try{const raw=localStorage.getItem(CACHE_KEY);if(raw){const cached=JSON.parse(raw);validateSheet(cached.sheet);load({sheets:[cached.sheet]},cached.label||'저장된 시간표');return;}}catch{try{localStorage.removeItem(CACHE_KEY);}catch{}}
+ try{const response=await fetch('./default-timetable.json');if(!response.ok)throw Error();const data=await response.json();if(version===loadVersion)load(data,'기본 시간표');}
+ catch{if(version===loadVersion)showStatus('기본 시간표를 읽지 못했습니다. 새로고침하거나 시간표 파일을 선택하세요.');}
+}
 function clear(){if(!sheet)return;request++;selected=null;matches=[];draw();render();}
 function visibleMatches(){return matches.filter(m=>!$('sameDay').checked||m.lesson.day===selected?.day);}
 function draw(){
@@ -16,9 +36,9 @@ function draw(){
  head+='</tr><tr>'+sheet.slots.map(s=>`<th class="period-head ${s.period===1?'day-start':''}">${s.period}</th>`).join('')+'</tr>';
  $('gridHead').innerHTML=head;
  const lookup=new Map(sheet.lessons.map(x=>[`${x.teacher}/${x.day}/${x.period}`,x]));
- const query=$('search').value.trim();let html='';
- for(const t of sheet.teachers.filter(t=>t.name.includes(query))){
-  html+=`<tr><th scope="row" class="teacher-col ${selected?.teacher===t.id?'selected-teacher':''}">${esc(t.name)}</th>`;
+ let html='';
+ for(const t of sheet.teachers){
+  html+=`<tr class="${focusedTeacher===t.id?'row-focused':focusedTeacher?'row-unfocused':''}"><th scope="row" class="teacher-col ${selected?.teacher===t.id?'selected-teacher':''}">${`<button class="teacher-name" data-teacher="${esc(t.id)}" aria-pressed="${focusedTeacher===t.id}" aria-label="${esc(t.name)} 시간표 강조">${esc(t.name)}</button>`}</th>`;
   for(const s of sheet.slots){
    const x=lookup.get(`${t.id}/${s.day}/${s.period}`),rank=x?ranks.get(x.id):null;
    html+=`<td class="${s.period===1?'day-start':''}">${x?`<button data-id="${esc(x.id)}" ${rank?'data-match="true"':''} ${isFixedLesson(x)?'title="고정 수업 · 교체 불가"':''} class="${/^\d+-\d+$/.test(x.group)?'':'activity'} ${selected?.id===x.id?'active':''} ${rank?'possible':''} ${isFixedLesson(x)?'fixed-lesson':''}" aria-pressed="${selected?.id===x.id}" aria-label="${esc(t.name)} ${time(x)} ${esc(x.subject)} ${esc(x.group)}${isFixedLesson(x)?' 고정 수업 교체 불가':''}${rank?' 교체 추천 '+rank+'순위':''}">${rank?`<em>${rank}</em>`:''}<b>${esc(x.subject)}</b><span>${esc(x.group||'활동')}</span></button>`:'<span class="free">·</span>'}</td>`;
@@ -29,6 +49,18 @@ function draw(){
 }
 async function choose(id){selected=sheet.lessons.find(x=>x.id===id);matches=[];draw();$('results').innerHTML='<div class="empty">교체 가능한 시간을 확인하고 있어요…</div>';const token=++request;try{const data=swapCandidates(sheet,id);if(token!==request)return;matches=data;draw();render();}catch(e){if(token===request){$('status').hidden=false;$('status').textContent=e.message;render();}}}
 function render(){$('selection').innerHTML=selected?`<span>비워야 하는 수업</span><b>${esc(name(selected.teacher))} · ${time(selected)}</b><br>${esc(selected.subject)} / ${esc(selected.group||'학급 미지정 활동')}`:'';const list=visibleMatches();$('resultCount').textContent=list.length;if(!selected){$('results').innerHTML='<div class="empty"><p>교체할 수업을 클릭하세요.</p></div>';return;}if(!list.length){$('results').innerHTML=`<div class="empty"><div>⌕</div><h3>${isFixedLesson(selected)?'교체할 수 없는 고정 수업입니다.':'조건에 맞는 교체가 없어요.'}</h3><p>${isFixedLesson(selected)?'스A · 스B · 스클 · 주1 · 주2 · 창체 · 진로는 교체 대상에서 제외됩니다.':!/^\d+-\d+$/.test(selected.group)?'학급이 지정되지 않은 활동은 자동 교체할 수 없어요.':'두 교사의 빈 시간과 같은 학급 조건을 충족하는<br>단독 수업이 없습니다. 다른 수업이나 요일 조건을 확인하세요.'}</p></div>`;return;}$('results').innerHTML=list.map((m,i)=>{const o=m.lesson,changes=m.changes.filter(c=>c.teacher===o.teacher);return `<article class="candidate" data-card="${esc(o.id)}"><div class="candidate-head"><h3>${i+1}. ${esc(name(o.teacher))}<small>${esc(o.subject)} · ${esc(o.group)}</small></h3><span class="score">${m.score}점</span></div><div class="swap-path">${time(o)}</div><div class="changes">${changes.map(c=>`${days[c.day]} 시수 ${c.before.count}→${c.after.count} · 연속 ${c.before.run}→${c.after.run}`).join(' / ')}</div><div class="candidate-bottom"><button data-locate="${esc(o.id)}">시간표에서 보기</button><button data-proposal="${esc(o.id)}">제안 보기 ↗</button></div></article>`;}).join('');}
-$('grid').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;if(b.dataset.match){[...$('results').querySelectorAll('[data-proposal]')].find(x=>x.dataset.proposal===b.dataset.id)?.click();}else choose(b.dataset.id);};$('sheet').onchange=changeSheet;$('search').oninput=()=>{if(!sheet)return;draw();};$('reset').onclick=clear;$('sameDay').onchange=()=>{draw();render();};$('criteria').onclick=()=>{$('criteriaText').hidden=!$('criteriaText').hidden;};
-$('results').onclick=e=>{const locate=e.target.closest('[data-locate]');if(locate){$('search').value='';draw();const cell=[...$('grid').querySelectorAll('[data-id]')].find(x=>x.dataset.id===locate.dataset.locate);cell?.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});cell?.focus({preventScroll:true});return;}const b=e.target.closest('[data-proposal]');if(!b)return;const m=matches.find(m=>m.lesson.id===b.dataset.proposal),o=m.lesson;proposal=`${selected.group} 학급\n\n${name(selected.teacher)} · ${selected.subject}\n${time(selected)} → ${time(o)}\n\n${name(o.teacher)} · ${o.subject}\n${time(o)} → ${time(selected)}`;$('proposal').textContent=proposal;$('copy').textContent='제안 내용 복사';$('dialog').showModal();};$('close').onclick=()=>$('dialog').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(proposal);$('copy').textContent='복사 완료';}catch{$('copy').textContent='내용을 직접 선택해 복사하세요';}};
-$('upload').onchange=async e=>{const file=e.target.files[0];if(!file)return;$('status').hidden=true;$('status').textContent='';try{if(file.size>5000000)throw Error('5MB 이하 파일을 선택하세요.');load(parseWorkbook(await file.arrayBuffer()));$('status').textContent='';$('status').hidden=true;}catch(err){$('status').hidden=false;$('status').textContent=err.message;}e.target.value='';};
+$('grid').onclick=e=>{const teacher=e.target.closest('[data-teacher]');if(teacher){focusedTeacher=focusedTeacher===teacher.dataset.teacher?null:teacher.dataset.teacher;draw();const target=[...$('grid').querySelectorAll('[data-teacher]')].find(x=>x.dataset.teacher===teacher.dataset.teacher);target?.focus({preventScroll:true});return;}const b=e.target.closest('[data-id]');if(!b)return;if(b.dataset.match){[...$('results').querySelectorAll('[data-proposal]')].find(x=>x.dataset.proposal===b.dataset.id)?.click();}else choose(b.dataset.id);};$('reset').onclick=()=>{focusedTeacher=null;clear();};$('sameDay').onchange=()=>{draw();render();};$('criteria').onclick=()=>{$('criteriaText').hidden=!$('criteriaText').hidden;};
+$('results').onclick=e=>{const locate=e.target.closest('[data-locate]');if(locate){focusedTeacher=null;draw();const cell=[...$('grid').querySelectorAll('[data-id]')].find(x=>x.dataset.id===locate.dataset.locate);cell?.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});cell?.focus({preventScroll:true});return;}const b=e.target.closest('[data-proposal]');if(!b)return;const m=matches.find(m=>m.lesson.id===b.dataset.proposal),o=m.lesson;proposal=`${selected.group} 학급\n\n${name(selected.teacher)} · ${selected.subject}\n${time(selected)} → ${time(o)}\n\n${name(o.teacher)} · ${o.subject}\n${time(o)} → ${time(selected)}`;$('proposal').textContent=proposal;$('copy').textContent='제안 내용 복사';$('dialog').showModal();};$('close').onclick=()=>$('dialog').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(proposal);$('copy').textContent='복사 완료';}catch{$('copy').textContent='내용을 직접 선택해 복사하세요';}};
+$('formatClose').onclick=()=>$('formatDialog').close();
+$('upload').onchange=async e=>{
+ const file=e.target.files[0];if(!file)return;const version=++loadVersion;showStatus('');
+ try{
+  if(file.size>5000000)throw Error('5MB 이하 파일을 선택하세요.');
+  const data=parseWorkbook(await file.arrayBuffer());if(version!==loadVersion)return;load(data,file.name);saveTimetable(file.name);
+ }catch(err){
+  $('formatMessage').textContent=FORMAT_ERROR;
+  if(file.size>5000000)$('formatMessage').textContent+=' 5MB 이하 파일을 선택하세요.';
+  $('formatDialog').showModal();if(!sheet)restoreTimetable();
+ }finally{e.target.value='';}
+};
+restoreTimetable();
