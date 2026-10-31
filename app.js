@@ -23,8 +23,17 @@ function showStatus(message){$('status').hidden=!message;$('status').textContent
 async function restoreTimetable(){
  const version=loadVersion;
  try{const raw=localStorage.getItem(CACHE_KEY);if(raw){const cached=JSON.parse(raw);validateSheet(cached.sheet);load({sheets:[cached.sheet]},cached.label||'저장된 시간표');return;}}catch{try{localStorage.removeItem(CACHE_KEY);}catch{}}
- try{const response=await fetch('./default-timetable.json');if(!response.ok)throw Error();const data=await response.json();if(version===loadVersion)load(data,'기본 시간표');}
- catch{if(version===loadVersion)showStatus('기본 시간표를 읽지 못했습니다. 새로고침하거나 시간표 파일을 선택하세요.');}
+ try{
+  let data=window.DEFAULT_TIMETABLE;
+  if(!data){
+   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+   try{const response=await fetch('./default-timetable.json',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error();data=await response.json();}
+   finally{clearTimeout(timeout);}
+  }
+  if(version===loadVersion)load(data,'기본 시간표');
+ }catch{
+  if(version===loadVersion){$('grid').innerHTML='<tr><td class="initial-empty">시간표를 읽지 못했습니다. 위의 시간표 불러오기로 파일을 선택할 수 있습니다.</td></tr>';showStatus('기본 시간표를 읽지 못했습니다. 새로고침하거나 시간표 파일을 선택하세요.');}
+ }
 }
 function clear(){if(!sheet)return;request++;selected=null;matches=[];draw();render();}
 function visibleMatches(){return matches.filter(m=>!$('sameDay').checked||m.lesson.day===selected?.day);}
