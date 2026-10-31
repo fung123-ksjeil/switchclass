@@ -83,18 +83,23 @@ function openProposal(lessons){
  proposal=`${a.group} 학급\n\n${name(a.teacher)} · ${a.subject}\n${time(a)} → ${time(b)}\n\n${name(b.teacher)} · ${b.subject}\n${time(b)} → ${time(a)}`;
  $('proposal').textContent=proposal;$('copy').textContent='제안 내용 복사';
  const existing=savedSwaps.find(p=>samePair(p,proposalPair));
- $('saveSwap').disabled=!!existing;$('saveSwap').textContent=existing?'저장됨':'저장';
+ $('saveSwap').disabled=false;$('saveSwap').textContent=existing?'삭제':'저장';$('saveSwap').classList.toggle('delete-swap',!!existing);
  $('saveMessage').textContent=existing?`저장한 교체 ${existing.number}`:'';
  $('dialog').showModal();
 }
 function openSavedProposal(id){const pair=savedSwaps.find(p=>p.id===id);if(pair)openProposal(pair.lessons);}
 $('saveSwap').onclick=()=>{
- if(!proposalPair||savedSwaps.some(p=>samePair(p,proposalPair)))return;
+ if(!proposalPair)return;
+ const existing=savedSwaps.find(p=>samePair(p,proposalPair));
+ if(existing){
+  if(!persistSwaps(savedSwaps.filter(p=>p.id!==existing.id))){$('saveMessage').textContent='삭제하지 못했습니다. 브라우저 저장 설정을 확인하세요.';return;}
+  renderSavedList();$('saveSwap').textContent='저장';$('saveSwap').classList.remove('delete-swap');$('saveMessage').textContent='삭제했습니다.';return;
+ }
  if(savedSwaps.some(p=>p.lessons.some(l=>proposalPair.some(x=>x.id===l.id)))){$('saveMessage').textContent='이미 다른 교체에 저장된 수업입니다. 저장 목록에서 기존 교체를 삭제한 뒤 저장하세요.';return;}
  const nextNumber=Math.max(0,...savedSwaps.map(p=>p.number))+1;
  const record={id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2),number:nextNumber,lessons:proposalPair};
  if(!persistSwaps([...savedSwaps,record])){$('saveMessage').textContent='브라우저에 저장하지 못했습니다. 저장 공간과 브라우저 설정을 확인하세요.';return;}
- $('saveSwap').disabled=true;$('saveSwap').textContent='저장됨';$('saveMessage').textContent=`교체 ${nextNumber} 저장 완료 · 같은 색과 번호로 표시했습니다.`;
+ $('saveSwap').disabled=false;$('saveSwap').textContent='삭제';$('saveSwap').classList.add('delete-swap');$('saveMessage').textContent=`교체 ${nextNumber} 저장 완료 · 같은 색과 번호로 표시했습니다.`;
 };
 function renderSavedList(){
  $('savedList').innerHTML=savedSwaps.length?savedSwaps.map(pair=>{const [a,b]=pair.lessons,c=pairColor(pair.number);return `<article class="saved-item" style="--pair-bg:${c.bg};--pair-border:${c.border}"><h3><span class="saved-number">${pair.number}</span> ${esc(a.group)} 학급</h3><p>${esc(name(a.teacher))} · ${esc(a.subject)}<br>${time(a)} → ${time(b)}</p><p>${esc(name(b.teacher))} · ${esc(b.subject)}<br>${time(b)} → ${time(a)}</p><div><button data-saved-view="${esc(pair.id)}">시간표에서 보기</button><button data-saved-remove="${esc(pair.id)}">삭제</button></div></article>`;}).join(''):'<p class="empty">저장한 교체가 없습니다.</p>';
