@@ -14,3 +14,4 @@ body{height:100dvh;overflow:hidden}.compact-toolbar{height:46px;padding:0 10px;g
 .saved-footer{display:flex;gap:8px;margin-top:12px}#savedDeleteAll{color:#a3322e;border-color:#d8aaa6}#savedDeleteAll:hover{background:#fff0ef}#savedDeleteAll:disabled{color:#9ba2a7;border-color:#e0e4e6;background:#f4f5f6;cursor:default}
 #conflictText{white-space:pre-line;font-size:13px;line-height:1.9;margin:16px 0;color:#6f4220}#conflictYes{background:#1949a3;color:white;border-color:#1949a3}.all-table td button.saved-pair .pair-badge{max-width:95%;overflow:hidden;text-overflow:ellipsis}
 .application-row-title{font-weight:600}.application-row p{padding-left:0}
+.compact-toolbar .brand-mark{width:28px;height:26px;flex-shrink:0}.compact-toolbar .brand span{font-size:16px}@media(max-width:760px){.compact-toolbar .brand-mark{width:23px;height:23px}.compact-toolbar .brand span{font-size:14px}}
