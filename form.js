@@ -43,16 +43,27 @@ function collectApplication(){
  return {teacher,teacherName:name(teacher),absenceDate,reason:'',note:$('applicationNote').value.trim(),rows};
 }
 function applicationPreview(data){
- const applicant=`( ${[...new Set(data.rows.map(r=>r.own.subject))].join('·')} )과     교 사 : ( ${data.teacherName} ) 인`,filled=new Map(data.rows.map(r=>[r.own.period,r]));
- const rows=Array.from({length:7},(_,i)=>{const r=filled.get(i+1);return `<tr class="period-row"><td>${i+1}</td>${r?[r.own.group,r.own.subject,r.other.subject,r.otherName,dateLabel(r.makeupDate),r.other.period,''].map(v=>`<td>${esc(v)}</td>`).join(''):'<td></td>'.repeat(7)}</tr>`;}).join('');
+ // Use the actual preview embedded in the 2026 HWPX, rather than redraw its
+ // table in HTML. Coordinates are in the original 724 × 1024 preview pixels;
+ // percentage positioning keeps the original page and overlays aligned.
+ const box=(x,y,w,h,text,cls='')=>`<div class="field ${cls}" style="left:${x/724*100}%;top:${y/1024*100}%;width:${w/724*100}%;height:${h/1024*100}%">${esc(text)}</div>`;
+ const applicant=`( ${[...new Set(data.rows.map(r=>r.own.subject))].join('·')} )과     교 사 : ( ${data.teacherName} ) 인`;
+ const filled=new Map(data.rows.map(r=>[r.own.period,r]));
+ const starts=[371,417,460,503,546,589,632],heights=[46,43,43,43,43,43,38];
+ const rows=starts.map((y,i)=>{
+  const r=filled.get(i+1);
+  const cells=r?[r.own.group,r.own.subject,r.other.subject,r.otherName,dateLabel(r.makeupDate),r.other.period]:[];
+  return `<div class="period-row">${cells.map((v,j)=>box([135,177,237,297,433,520][j],y+1,[39,57,57,133,84,36][j],heights[i]-3,v)).join('')}</div>`;
+ }).join('');
+ const image=new URL('./templates/application-2026-preview.png',location.href).href;
  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>결보강신청서 · ${esc(data.teacherName)}</title><style>
- *{box-sizing:border-box}body{background:#e8ebee;margin:0;font-family:'바탕',Batang,serif;color:#000}.actions{position:sticky;top:0;padding:12px;background:white;border-bottom:1px solid #ccc;display:flex;gap:10px;z-index:2;font-family:system-ui}.actions a,.actions button{font:13px system-ui;padding:8px 14px;border:1px solid #bbb;border-radius:5px;background:#fff;text-decoration:none;color:#222;cursor:pointer}.actions a{background:#1949a3;color:#fff;border-color:#1949a3}.paper{width:210mm;min-height:297mm;margin:18px auto;background:white;padding:35mm 25mm 20mm}.form-heading{height:30mm;position:relative;padding-top:1mm}.form-heading h1{font-size:15pt;letter-spacing:3px;margin:0;text-align:center;padding-right:28mm}.approval{position:absolute;right:0;top:1mm;width:37mm;border-collapse:collapse;font-size:9pt;text-align:center}.approval td{border:.25mm solid #000;width:50%;height:5mm}.approval tr:last-child td{height:15mm}.applicant{position:absolute;bottom:0;width:100%;text-align:right;padding-right:43mm;font-size:11pt;margin:0 0 1mm;white-space:pre-wrap}.form-table{border-collapse:collapse;table-layout:fixed;width:160mm;font-size:10pt}.form-table td,.form-table th{border:.25mm solid #000;padding:1mm;text-align:center;font-weight:normal;overflow-wrap:anywhere}.date-row{height:12mm}.date-row th{font-weight:bold}.date-row td{text-align:left;padding-left:4mm}.group-row{height:9.5mm}.subhead{height:9mm;font-size:9pt}.period-row{height:12.5mm;font-size:9pt}.period-row:first-of-type{height:13.5mm}.diagonal{position:relative;font-size:9pt}.diagonal svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.diagonal .top{position:absolute;right:2mm;top:2mm}.diagonal .bottom{position:absolute;left:1mm;bottom:1mm}.notes-title{height:11.5mm}.notes{height:43.5mm;vertical-align:top;white-space:pre-wrap;text-align:left!important;padding:4mm!important} @page{size:A4;margin:0}@media print{body{background:white}.actions{display:none}.paper{margin:0;min-height:0;height:297mm;box-shadow:none}.form-table{break-inside:avoid}}@media screen and (max-width:800px){.paper{margin:8px 0}.actions{flex-wrap:wrap}}
- </style></head><body><div class="actions"><button onclick="window.print()">인쇄 / PDF 저장</button></div><main class="paper"><header class="form-heading"><h1>결 · 보 강 신청서</h1><table class="approval"><tr><td>담당부원</td><td>교무부장</td></tr><tr><td></td><td></td></tr></table><p class="applicant">${esc(applicant)}</p></header><table class="form-table"><colgroup>${[13.35,12.33,17.41,17.41,39.73,25.64,11.49,21.6].map(w=>`<col style="width:${w}mm">`).join('')}</colgroup><tr class="date-row"><th colspan="2">결강일자</th><td colspan="6">${esc(dateLabel(data.absenceDate,true))}</td></tr><tr class="date-row"><th colspan="2">결강구분<br>(○표시)</th><td colspan="6">${esc(data.reason)}</td></tr><tr class="group-row"><th rowspan="2" class="diagonal"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="0" x2="100" y2="100" stroke="black" stroke-width="1" vector-effect="non-scaling-stroke"/></svg><span class="top">내<br>용</span><span class="bottom">교<br>시</span></th><th colspan="2">결강 사항</th><th colspan="2">교체 사항</th><th colspan="3">보강 사항</th></tr><tr class="subhead"><th>학반</th><th>과목</th><th>과 목</th><th>교체교사명</th><th>월 일(요일)</th><th>교시</th><th>비고</th></tr>${rows}<tr><td colspan="8" class="notes-title">결 · 보강 내용</td></tr><tr><td colspan="8" class="notes">${esc(data.note)}</td></tr></table></main></body></html>`;
+ *{box-sizing:border-box}body{margin:0;background:#e8ebee;color:#000;font-family:'바탕',Batang,'Noto Serif CJK KR',serif}.actions{position:sticky;top:0;z-index:2;padding:12px;background:white;border-bottom:1px solid #ccc}.actions button{font:13px system-ui;padding:8px 14px;background:white;border:1px solid #bbb;border-radius:5px;cursor:pointer}.paper{position:relative;width:210mm;height:297mm;margin:18px auto;background:white}.form-original{display:block;width:100%;height:100%}.field{position:absolute;display:flex;align-items:center;justify-content:center;padding:0 1px;font-size:10pt;line-height:1.25;overflow-wrap:anywhere;white-space:pre-wrap;background:white}.applicant{font-size:12pt}.date{justify-content:flex-start;padding-left:3mm;font-size:12pt}.notes{align-items:flex-start;justify-content:flex-start;padding:3mm;font-size:11pt}@page{size:A4;margin:0}@media print{body{background:white}.actions{display:none}.paper{margin:0;break-inside:avoid}}@media screen and (max-width:800px){.paper{margin:8px 0}}
+ </style></head><body><div class="actions"><button onclick="window.print()">인쇄 / PDF 저장</button></div><main class="paper"><img class="form-original" src="${esc(image)}" alt="2026년 결보강신청서 원본 양식">${box(170,204,327,19,applicant,'applicant')}${box(170,230,460,33,dateLabel(data.absenceDate,true),'date')}${data.reason?box(170,269,460,34,data.reason):''}${rows}${box(89,713,541,143,data.note,'notes')}</main></body></html>`;
 }
 // Keep every original archive entry; change only text in the original section.
 let applicationTemplatePromise;
 async function applicationTemplate(){
- if(!applicationTemplatePromise)applicationTemplatePromise=fetch('./templates/application.hwpx').then(r=>{
+ if(!applicationTemplatePromise)applicationTemplatePromise=fetch('./templates/application-2026.hwpx').then(r=>{
   if(!r.ok)throw Error('신청서 원본을 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
   return r.arrayBuffer();
  }).catch(e=>{applicationTemplatePromise=null;throw e;});
@@ -78,13 +89,21 @@ function applicationHwpx(template,data){
   xml=xml.replace(/<hp:tc\b[^>]*>(?:(?!<hp:tc\b)[\s\S])*?<\/hp:tc>/g,cell=>{
    if(!cell.includes(`<hp:cellAddr colAddr="${col}" rowAddr="${row}"/>`))return cell;
    found=true;
+   if(address==='1/2'){
+    // The 2026 form uses separate runs for the year and the rest of the
+    // date. Fill both in place, retaining their individual character styles.
+    const date=localDate(data.absenceDate);
+    return cell.replace('<hp:t>2026</hp:t>',`<hp:t>${date.getFullYear()}</hp:t>`)
+     .replace('<hp:t>년 월 일  ( 요일 )</hp:t>',`<hp:t>년 ${date.getMonth()+1}월 ${date.getDate()}일 (${['일','월','화','수','목','금','토'][date.getDay()]}요일)</hp:t>`);
+   }
    return cell.replace(/<hp:run\b([^>]*?)(?:\/>|>[\s\S]*?<\/hp:run>)/,(_,attrs)=>`<hp:run${attrs}><hp:t>${encode(value)}</hp:t></hp:run>`);
   });
   if(!found)throw Error('신청서 원본의 입력 칸을 찾지 못했습니다.');
  }
  const applicant=`( ${[...new Set(data.rows.map(r=>r.own.subject))].join('·')} )과     교 사 : ( ${data.teacherName} ) 인`;
- if(!xml.includes('(    )과     교 사 : (    ) 인'))throw Error('신청서 원본의 신청 교사 칸을 찾지 못했습니다.');
- xml=xml.replace('(    )과     교 사 : (    ) 인',encode(applicant));
+ const applicantPlaceholder=/\( +\)과 +교 사 : \( +\) 인/;
+ if(!applicantPlaceholder.test(xml))throw Error('신청서 원본의 신청 교사 칸을 찾지 못했습니다.');
+ xml=xml.replace(applicantPlaceholder,()=>encode(applicant));
  files[path]=fflate.strToU8(xml);
  // Refresh the text preview while preserving all document/layout resources.
  files['Preview/PrvText.txt']=fflate.strToU8([applicant,dateLabel(data.absenceDate,true),...data.rows.map(r=>`${r.own.period}교시 ${r.own.group} ${r.own.subject} → ${r.other.subject} ${r.otherName} ${dateLabel(r.makeupDate)} ${r.other.period}교시`),data.note].join('\r\n'));

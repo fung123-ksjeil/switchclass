@@ -10,7 +10,7 @@ NS = {'p': 'http://www.hancom.co.kr/hwpml/2011/paragraph'}
 
 
 def verify_archive(blob, expected):
-    original = zipfile.ZipFile(ROOT / 'templates/application.hwpx')
+    original = zipfile.ZipFile(ROOT / 'templates/application-2026.hwpx')
     output = zipfile.ZipFile(io.BytesIO(blob))
     assert output.testzip() is None
     assert output.namelist() == original.namelist()
@@ -36,6 +36,7 @@ def verify_archive(blob, expected):
                 if addr.get('rowAddr') == str(row) and addr.get('colAddr') == str(col):
                     return ''.join(cell.itertext())
         raise AssertionError((row, col))
+    assert text(1, 2).strip() == '2026년 11월 2일 (월요일)'
     for (row, col), value in expected.items():
         assert value in text(row, col), (row, col, value, text(row, col))
     print('PASS: archive integrity, all XML, original styles/merges/dimensions, filled values')
@@ -81,6 +82,13 @@ with sync_playwright() as p:
     assert data['teacherName'] in preview.locator('.applicant').inner_text()
     assert note in preview.locator('.notes').inner_text()
     assert preview.locator('.period-row').count() == 7
+    assert preview.locator('.form-original').evaluate('(e)=>e.complete && e.naturalWidth===724 && e.naturalHeight===1024')
+    assert (ROOT / 'templates/application-2026-preview.png').read_bytes() == zipfile.ZipFile(ROOT / 'templates/application-2026.hwpx').read('Preview/PrvImage.png')
+    # The exact original page image is the background; every populated field
+    # stays within its original blank cell at screen and print dimensions.
+    assert preview.locator('.field').evaluate_all('(fields)=>fields.every(e=>e.scrollHeight<=e.clientHeight && e.scrollWidth<=e.clientWidth)')
+    preview.locator('.paper').screenshot(path='/tmp/application-2026-filled.png')
+    preview.pdf(path='/tmp/application-2026-filled.pdf',prefer_css_page_size=True)
     preview.close()
     with page.expect_download() as dl:
         page.locator('#applicationDownload').click()
@@ -102,11 +110,11 @@ with sync_playwright() as p:
       (5, 5): '이&교사', (11, 5): '박<교사', (6, 1): '', (13, 0): ''})
     # Failed fetch is reported, controls recover, and retry succeeds.
     page.evaluate('applicationTemplatePromise=null')
-    page.route('**/templates/application.hwpx', lambda route: route.fulfill(status=503, body='unavailable'))
+    page.route('**/templates/application-2026.hwpx', lambda route: route.fulfill(status=503, body='unavailable'))
     page.locator('#applicationDownload').click()
     page.wait_for_function("document.getElementById('applicationError').textContent.includes('원본')")
     assert page.locator('#applicationDownload').is_enabled()
-    page.unroute('**/templates/application.hwpx')
+    page.unroute('**/templates/application-2026.hwpx')
     with page.expect_download():
         page.locator('#applicationDownload').click()
     assert page.locator('#applicationError').inner_text() == ''
